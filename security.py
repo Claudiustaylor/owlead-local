@@ -74,9 +74,23 @@ def get_or_create_key():
     return key
 
 
+def _canonical_body(body_text):
+    """Deterministic canonical form for signing/verification.
+    Strips any embedded signature line, normalizes line endings to \n,
+    and strips trailing whitespace — so the same logical content always
+    hashes to the same bytes regardless of how the file was transmitted."""
+    lines = [
+        ln.rstrip() for ln in body_text.splitlines()
+        if not ln.strip().startswith("# signature:")
+    ]
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def sign_patterns(body_text):
+    """Sign the canonical form so transmission whitespace/newline drift
+    can't break verification."""
     key = get_or_create_key()
-    return hmac.new(key, body_text.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.new(key, _canonical_body(body_text).encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def load_trusted_fingerprints():
@@ -84,6 +98,20 @@ def load_trusted_fingerprints():
         return set()
     with open(TRUSTED_FINGERPRINTS_FILE) as f:
         return {ln.strip() for ln in f if ln.strip()}
+
+
+def seed_fingerprints_from_local():
+    """Bootstrap trust from the CURRENT local patterns.yaml — the file that
+    shipped and was human-verified. Called lazily on first verification.
+    After seeding, only updates signed with the local key or matching an
+    already-trusted fingerprint are accepted. NO TOFU on remote content.
+    """
+    fps = load_trusted_fingerprints()
+    if fps:
+        return
+    with open(PATTERNS, "rb") as f:
+        local_hash = hashlib.sha256(f.read()).hexdigest()
+    trust_fingerprint(local_hash)
 
 
 def trust_fingerprint(fp):
@@ -97,10 +125,12 @@ def trust_fingerprint(fp):
 def verify_remote_update(body_text):
     """Return (ok: bool, reason: str).
 
-    Policy:
-    - First-ever update must be manually trusted (fingerprint seeded).
-    - Every later update must match a previously trusted fingerprint
-      OR carry a valid signature produced with the local key.
+    Policy (no TOFU on remote content, ever):
+    - Trust is bootstrapped ONCE from the local, human-verified patterns.yaml.
+    - Every update must then match a previously trusted fingerprint
+      OR carry a valid HMAC signature produced with the local key.
+    - The fingerprint of the CURRENT LOCAL file is always accepted
+      (idempotent re-fetch of the same file is not an update).
     """
     fps = load_trusted_fingerprints()
     file_hash = hashlib.sha256(body_text.encode("utf-8")).hexdigest()
@@ -108,24 +138,25 @@ def verify_remote_update(body_text):
     if file_hash in fps:
         return True, "known-good fingerprint"
 
-    # look for an embedded signature line (trusted publisher signs updates)
+    # current local file hash is always safe (same-as-installed)
+    try:
+        with open(PATTERNS, "rb") as f:
+            local_hash = hashlib.sha256(f.read()).hexdigest()
+        if file_hash == local_hash:
+            return True, "matches current installed file"
+    except OSError:
+        pass
+
+    # look for an embedded signature line (publisher signs each update)
     sig = None
     for line in body_text.splitlines():
         if line.strip().startswith("# signature:"):
             sig = line.split(":", 1)[1].strip()
             break
     if sig:
-        body_no_sig = "\n".join(
-            ln for ln in body_text.splitlines()
-            if not ln.strip().startswith("# signature:")
-        )
-        if hmac.compare_digest(sign_patterns(body_no_sig), sig):
+        # sign_patterns canonicalizes the body itself; verify against same form
+        if hmac.compare_digest(sign_patterns(body_text), sig):
             return True, "valid HMAC signature"
-
-    if not fps:
-        # first-time bootstrap: trust on first use, then pin
-        trust_fingerprint(file_hash)
-        return True, "TOFU bootstrap — fingerprint pinned"
 
     return False, "unrecognized fingerprint and no valid signature — REJECTED as possible poisoning"
 
@@ -217,6 +248,9 @@ def startup_audit():
         mode = stat.S_IMODE(os.stat(DB_PATH).st_mode)
         if mode & 0o077:
             _chmod_600(DB_PATH)
+
+    # ensure trust store is seeded from the local verified file
+    seed_fingerprints_from_local()
 
     return problems
 
