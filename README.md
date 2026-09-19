@@ -79,3 +79,20 @@ I push safety updates when platforms change limits or selectors — you never ed
 2. **First week: run it on the `cold` tier** even if your account is older. Trust builds; pace earns.
 3. **If a run ever prints a lockout, leave it.** The cooldown is the rescue, the half-pace return is the rebuild.
 4. **Visible-browser runs (`run` without `--headless`)** look more human than headless. Use visible.
+
+## Security (read this)
+This app holds two logged-in social sessions — treat it like a vault, not a script.
+
+- **Session vault** — `.browser-profile/` is permission-locked to your macOS user (0700). Other users/processes can't read it.
+- **DB + logs locked** (0600) — same treatment for your action history.
+- **Signed pattern updates** — even if the repo URL were hijacked, a poisoned `patterns.yaml` can't load: updates are fingerprint-pinned and HMAC-signed with a local-only key. First update is trusted-on-first-use, then every later update must match a known fingerprint or a valid signature — otherwise it's rejected and the last-known-good keeps running.
+- **Dependency pinning** — on every run the app verifies installed `playwright` and `pyyaml` versions against pinned known-goods and refuses quietly if anything drifted (supply-chain guard).
+- **Sandbox stays on** — never `--no-sandbox`. Untrusted pages load in the browser sandbox, and no page ever gets access to `file://`.
+
+**Hard rule (for me and for future edits): NEVER put passwords, API keys, tokens, or session data in code, config files, committed files, or chat.** Secrets live in the environment or the keychain only. If a security control can't be set up with the access currently available: STOP and ask, never improvise. Harden from the default; never soften it to make something work.
+
+Run the audit any time:
+
+```bash
+python3 owlead.py security-audit
+```
