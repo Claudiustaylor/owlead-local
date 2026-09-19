@@ -1,0 +1,8 @@
+.browser-profile/
+owlead.db
+owlead.log
+patterns.backup.yaml
+.pattern_version
+__pycache__/
+*.pyc
+.DS_Store
