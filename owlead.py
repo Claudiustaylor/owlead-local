@@ -4,6 +4,7 @@ Playwright-driven, human-paced, safety-governed IG + X growth.
 - Real SQLite ledger of every action, every follow-back, every block.
 - Self-updating safety patterns (updater.py) before every run.
 - Uses your already-logged-in browser profile (no password storage).
+- Hardened session vault + signed updates via security.py.
 """
 import argparse
 import datetime as dt
@@ -18,6 +19,7 @@ import time
 import yaml
 from playwright.sync_api import sync_playwright
 
+import security
 import updater
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -427,10 +429,26 @@ def collect_targets(page, platform, source_kind, source_value, per_page=25):
 # RUN LOOP
 # ---------------------------------------------------------------
 def cmd_run(args):
+    # security gate BEFORE anything else touches the browser
+    print("[security] running startup audit…")
+    sec_issues = security.startup_audit()
+    security.lock_down_local_state()
+    if sec_issues:
+        for i in sec_issues:
+            print(f"  [security] {i}")
+    else:
+        print("[security] clean")
+
     patterns = updater.load()
     updates = updater.SelfUpdater(patterns).maybe_update()
     if updates:
-        patterns = updates
+        # verify the remote update before trusting it
+        ok, reason = security.verify_remote_update(open(updater.LOCAL_PATTERNS).read())
+        if ok:
+            patterns = updater.load()  # reload post-update
+            print(f"[security] pattern update verified ({reason})")
+        else:
+            print(f"[security] pattern update REJECTED: {reason} — keeping last-known-good")
     gov = Governor(patterns)
 
     conn = db()
@@ -558,6 +576,7 @@ def main():
     sub.add_parser("list-sources")
     sub.add_parser("sweep")
     sub.add_parser("check-update")
+    sub.add_parser("security-audit")
     args = ap.parse_args()
 
     if args.cmd == "run":
@@ -578,6 +597,8 @@ def main():
             print(f"updated to v{result['meta']['version']}")
         else:
             print("no update — already current")
+    elif args.cmd == "security-audit":
+        security.audit_report()
     else:
         ap.print_help()
 

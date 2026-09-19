@@ -3,6 +3,8 @@ owlead.db
 owlead.log
 patterns.backup.yaml
 .pattern_version
+.update_key
+.trusted_fingerprints
 __pycache__/
 *.pyc
 .DS_Store
