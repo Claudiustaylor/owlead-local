@@ -1,0 +1,145 @@
+# ============================================================
+# OWLEAD LOCAL — SAFETY PATTERNS (self-updating)
+# version: 1.0.0
+# updated: 2026-09-19
+# source: community-tested 2026 limits (smartfollower, unfollr, X help)
+#
+# This file is the SAFETY BRAIN. The app fetches a newer version
+# of this file from the configured URL on every startup and at
+# noon each day. Newer version wins: limits change, selectors
+# change, escalation rules change — the app self-heals.
+#
+# To push an update remotely: bump `version`, edit values, commit.
+# ============================================================
+
+meta:
+  version: "1.0.0"
+  updated: "2026-09-19"
+
+# ---------- SELF-UPDATE ----------
+update:
+  # Remote URL of THIS file. Set to your GitHub raw URL after
+  # pushing the repo. Empty = local-only mode (no auto-update).
+  remote_url: ""
+  check_on_start: true
+  check_daily_at: "12:00"
+  # Only accept updates whose version is strictly newer.
+  require_newer_version: true
+
+# ---------- HUMAN BEHAVIOR PROFILE (the anti-ban engine) ----------
+# Accounts are graded by trust. Trust shifts with account age,
+# verification, prior blocks, and whether THIS app caused a warning.
+trust_tiers:
+  cold:        # new account, or account recovering from a block
+    follows_per_day: 30
+    unfollows_per_day: 30
+    likes_per_day: 120
+    follows_per_hour: 8
+    likes_per_hour: 25
+    dm_per_day: 6
+    warmup_days: 14
+  warm:        # mid age, no recent warnings
+    follows_per_day: 80
+    unfollows_per_day: 80
+    likes_per_day: 300
+    follows_per_hour: 14
+    likes_per_hour: 45
+    dm_per_day: 18
+    warmup_days: 7
+  established: # old, verified, clean history
+    follows_per_day: 150
+    unfollows_per_day: 150
+    likes_per_day: 500
+    follows_per_hour: 22
+    likes_per_hour: 70
+    dm_per_day: 40
+    warmup_days: 0
+
+# default tier when account trust is unknown
+default_tier: cold
+
+# ---------- GLOBAL HARD RULES (never break, any tier) ----------
+hard_rules:
+  # The single most dangerous pattern: mass follow + mass unfollow
+  # same day. Enforce an absolute lockout.
+  forbid_follow_and_unfollow_same_day: true
+  # After ANY platform warning, freeze all active actions.
+  warning_cooldown_hours: 36
+  # Return from a warning at this fraction of prior pace.
+  post_warning_pace_factor: 0.5
+  # Night rest window — no actions between these hours (local).
+  quiet_hours_start: "00:30"
+  quiet_hours_end: "07:00"
+  # Max burst: never more than N actions in any 10-min window.
+  burst_cap_per_10min: 6
+  # Hard following ceiling on IG (platform-enforced). Stop early.
+  ig_max_following: 7200
+  # X ratio rule: can't follow past ~5000 until followers catch up.
+  x_ratio_gap_threshold: 4500
+
+# ---------- TIMING — make every action look human ----------
+timing:
+  # seconds; each action waits ~N(avg, avg*0.35) before the next
+  follow_gap_sec_avg: 45
+  like_gap_sec_avg: 18
+  story_view_gap_sec_avg: 30
+  unfollow_gap_sec_avg: 55
+  # random long pause every this many actions (simulate distraction)
+  long_pause_every_n_actions: 14
+  long_pause_sec_range: [180, 420]
+  # mouse/scroll jitter before clicking follow (ms)
+  pre_action_dwell_ms_range: [900, 3200]
+  # type speed for any text input (ms per char, human-ish)
+  type_delay_ms_range: [80, 190]
+
+# ---------- FAILURE DETECTION — self-defense ----------
+# If the app sees any of these strings/selectors, it treats it as
+# a platform warning: freeze actions, log, back off.
+block_signals:
+  ig_text:
+    - "Action Blocked"
+    - "Try Again Later"
+    - "We restrict certain activity"
+    - "Tell us if you think we made a mistake"
+    - "unusual activity"
+    - "checkpoint_required"
+  ig_url_fragments:
+    - "challenge"
+    - "accounts/suspended"
+  x_text:
+    - "Something went wrong"
+    - "rate limit"
+    - "suspicious"
+    - "Your account has been"
+    - " unusual activity"
+  # consecutive failures before the app assumes a soft block
+  consecutive_fail_threshold: 3
+
+# ---------- DOM SELECTORS (these rot — that's why we update) ----------
+selectors:
+  ig:
+    follow_button: "//button[contains(.,'Follow') and not(contains(.,'Following'))]"
+    unfollow_button: "//button[contains(.,'Following')]"
+    confirm_unfollow: "//button[contains(.,'Unfollow')]"
+    follow_back_badge: "//span[contains(.,'Follows you')]"
+    story_ring: "canvas"
+    like_button: "svg[aria-label='Like']"
+    unlike_button: "svg[aria-label='Unlike']"
+  x:
+    follow_button: "div[role='button'][data-testid$='-follow']"
+    unfollow_button: "div[role='button'][data-testid$='-unfollow']"
+    confirm_unfollow: "div[role='button'][data-testid='confirmationSheetConfirm']"
+    follower_cell: "div[data-testid='UserCell']"
+
+# ---------- GROWTH STRATEGY TUNING ----------
+growth:
+  # priority order for where follows come from
+  source_priority: [engagers, competitor_followers, hashtag_recent, follow_back_accepted]
+  # follow-back window: unfollow non-reciprocals after N days
+  follow_back_wait_days: 4
+  # whitelist: never unfollow accounts we liked/engaged 3+ times
+  whitelist_min_engagements: 3
+  # dedupe: don't re-follow someone we already followed in N days
+  refollow_cooldown_days: 30
+  # content cadence nudge (posts/week the app reminds you to hit)
+  target_posts_per_week: 3
