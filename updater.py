@@ -64,13 +64,21 @@ class SelfUpdater:
         Safe by construction: a failed fetch never destroys the local file.
         Validates the download is parseable YAML with a sane meta.version
         before swapping. Backs up the previous file before replacing.
+        For private repos, set GITHUB_TOKEN in your environment — the token
+        is read from the environment only, never written into the repo or logs.
         """
         url = self.remote_url()
         if not url:
             return False, None
 
+        headers = {"User-Agent": "owlead-local/1.0"}
+        token = os.environ.get("GITHUB_TOKEN", "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+            headers["Accept"] = "application/vnd.github.raw+json"
+
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "owlead-local/1.0"})
+            req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=15) as r:
                 body = r.read().decode("utf-8", "replace")
         except Exception as e:

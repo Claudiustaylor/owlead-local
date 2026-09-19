@@ -573,8 +573,11 @@ def main():
         cmd_followback_sweep(args)
     elif args.cmd == "check-update":
         p = updater.load()
-        changed, v = updater.SelfUpdater(p).maybe_update()
-        print("updated →", v) if changed else print("no update")
+        result = updater.SelfUpdater(p).maybe_update()
+        if result:
+            print(f"updated to v{result['meta']['version']}")
+        else:
+            print("no update — already current")
     else:
         ap.print_help()
 
