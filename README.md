@@ -91,6 +91,8 @@ This app holds two logged-in social sessions — treat it like a vault, not a sc
 
 **Hard rule (for me and for future edits): NEVER put passwords, API keys, tokens, or session data in code, config files, committed files, or chat.** Secrets live in the environment or the keychain only. If a security control can't be set up with the access currently available: STOP and ask, never improvise. Harden from the default; never soften it to make something work.
 
+**Adversarial-update integrity.** Pattern updates are fingerprint-pinned and HMAC-signed with a local-only key. Trust is seeded ONCE from the local human-verified file at startup — never by trusting remote content. An unsigned, tampered, or forged update is rejected and the last-known-good keeps running. This was attack-tested live: unsigned poison, forged signatures, and tampered payloads all rejected.
+
 Run the audit any time:
 
 ```bash
